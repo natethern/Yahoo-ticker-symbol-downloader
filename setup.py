@@ -4,10 +4,10 @@ from setuptools import setup, find_packages
 
 setup(
     name = 'Yahoo-ticker-downloader',
-    version = '3.0.1',
-    author = 'Benny Jacobs',
-    author_email = 'Benny@GMX.it',
-    url='https://github.com/Benny-/Yahoo-ticker-symbol-downloader',
+    version = '3.0.2',
+    author = 'Vlad Wulf',
+    author_email = 'agaev.vladimir@gmail.com',
+    url='https://github.com/VladWulf/Yahoo-ticker-symbol-downloader',
     license='BSD3',
     keywords = "market finance yahoo ticker stock stocks etf future futures index mutualfund currency warrant bond bonds".split(),
     description='A web scraper for ticker symbols from yahoo finance',
