@@ -8,7 +8,7 @@ from ytd.compat import quote
 
 user_agent = 'yahoo-ticker-symbol-downloader'
 general_search_characters = 'abcdefghijklmnopqrstuvwxyz0123456789.='
-first_search_characters = 'abcdefghijklmnopqrstuvwxyz'
+first_search_characters = '0123456789abcdefghijklmnopqrstuvwxyz'
 
 class SymbolDownloader:
     """Abstract class"""
