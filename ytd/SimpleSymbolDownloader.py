@@ -6,9 +6,17 @@ import math
 from ytd.compat import text
 from ytd.compat import quote
 
+from .compat import is_py3, text
+if is_py3:
+    import queue as queue
+else:
+    import Queue as queue
+
+from Query import Query
+
 user_agent = 'yahoo-ticker-symbol-downloader'
 general_search_characters = 'abcdefghijklmnopqrstuvwxyz0123456789.='
-first_search_characters = '0123456789abcdefghijklmnopqrstuvwxyz'
+first_search_characters = 'abcdefghijklmnopqrstuvwxyz0123456789'
 
 class SymbolDownloader:
     """Abstract class"""
@@ -19,25 +27,25 @@ class SymbolDownloader:
         self.symbols = {}
         self.rsession = requests.Session()
         self.type = type
-
-        self.queries = []
-        self._add_queries()
-        self.current_q = self.queries[0]
+        self.current_query = None
+        self.completed_queries = []
         self.done = False
 
-    def _add_queries(self, prefix=''):
-        # This method will add (prefix+)a...z to self.queries
-        # This API requires the first character of the search to be a letter.
-        # The second character can be a letter, number, dot, or equals sign.
-        if len(prefix)==0:
-            search_characters = first_search_characters
-        else:
-            search_characters = general_search_characters
+        # instantiate the queue
+        self.queries = queue.LifoQueue()
+        # instantiate the "master" query
+        self.master_query = Query('', None)
+        # put the first queries in the queue
+        self._add_queries(self.master_query, first_search_characters)
 
-        for i in range(len(search_characters)):
-            element = str(prefix) + str(search_characters[i])
-            if element not in self.queries:  # Avoid having duplicates in list
-                self.queries.append(element)
+    def _add_queries(self, query, search_characters):
+        # This method will add child queries to query and put the children in the queue
+        # Each child query will have an additional character appended to the parent query string
+        #  (taken from search_characters)
+        query.addChildren(search_characters)
+        # reverse children order when adding to the queue because it's LIFO queue
+        for q in query.children[::-1]:
+            self.queries.put(q)
 
     def _encodeParams(self, params):
         encoded = ''
@@ -47,7 +55,7 @@ class SymbolDownloader:
 
     def _fetch(self, insecure):
         params = {
-            'searchTerm': self.current_q,
+            'searchTerm': self.current_query.query_string,
         }
         query_string = {
             'device': 'console',
@@ -69,20 +77,9 @@ class SymbolDownloader:
     def decodeSymbolsContainer(self, symbolsContainer):
         raise Exception("Function to extract symbols must be overwritten in subclass. Generic symbol downloader does not know how.")
 
-    def _getQueryIndex(self):
-        return self.queries.index(self.current_q)
-
-    def getTotalQueries(self):
-        return len(self.queries)
-
-    def _nextQuery(self):
-        if self._getQueryIndex() + 1 >= len(self.queries):
-            self.current_q = self.queries[0]
-        else:
-            self.current_q = self.queries[self._getQueryIndex() + 1]
-
     def nextRequest(self, insecure=False, pandantic=False):
-        self._nextQuery()
+        # not threading, so blocking is irrelevant
+        self.current_query = self.queries.get_nowait()
         success = False
         retryCount = 0
         json = None
@@ -109,15 +106,23 @@ class SymbolDownloader:
                 else:
                     raise
 
+        self.completed_queries += [ self.current_query ]
         (symbols, count) = self.decodeSymbolsContainer(json)
 
         for symbol in symbols:
             self.symbols[symbol.ticker] = symbol
+            # record symbols returned for this query
+            self.current_query.results.append(symbol.ticker)
 
         # There is no pagination with this API.
-				# If we receive 10 results, we assume there are more than 10 and add another layer of queries to narrow the search further
+        # If we receive 10 results, we assume there are more than 10 and
+        #  add another layer of queries to narrow the search further
         if(count == 10):
-            self._add_queries(self.current_q)
+            self._add_queries(self.current_query, general_search_characters)
+        elif(count < 10 and count > 5):
+            # The API has started returning less than 10 results even though there are more results
+            # For now, assume that 6+ queries means incomplete results
+            self._add_queries(self.current_query, general_search_characters)
         elif(count > 10):
             # This should never happen with this API, it always returns at most 10 items
             raise Exception("Funny things are happening: count "
@@ -126,8 +131,11 @@ class SymbolDownloader:
                             + "Content:"
                             + "\n"
                             + repr(json))
+        else:
+            # Tell the query it's done
+            self.current_query.done()
 
-        if self._getQueryIndex() + 1 >= len(self.queries):
+        if self.queries.empty():
             self.done = True
         else:
             self.done = False
@@ -148,8 +156,9 @@ class SymbolDownloader:
             print("Progress: Done!")
         else:
             print("Progress:"
-                + " Query " + str(self._getQueryIndex()+1) + "/" + str(self.getTotalQueries()) + "."
-                + "\n"
-                + str(len(self.symbols)) + " unique " + self.type + " entries collected so far."
-                )
+                  + " Query " + str(len(self.completed_queries)) + "/" +
+                  str(len(self.completed_queries) + self.queries.qsize()) + "."
+                  + "\n"
+                  + str(len(self.symbols)) + " unique " + self.type + " entries collected so far."
+                 )
         print ("")

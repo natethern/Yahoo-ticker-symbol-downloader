@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 class Query:
     """Query String, results and summary of children's results"""
     def __init__(self, query_string, parent):
@@ -29,7 +31,7 @@ class Query:
         self.parent.child_done(self)
 
     def child_done(self, child):
-        self.num_complete++
-        self.children_results = set(self.children_results + child.results + child.children_results)
+        self.num_complete += 1
+        self.children_results = list(set(self.children_results + child.results + child.children_results))
         if self.num_complete == self.num_children:
             self.done()
