@@ -6,11 +6,7 @@ import math
 from ytd.compat import text
 from ytd.compat import quote
 
-from .compat import is_py3, text
-if is_py3:
-    import queue as queue
-else:
-    import Queue as queue
+from collections import deque
 
 from Query import Query
 
@@ -32,10 +28,10 @@ class SymbolDownloader:
         self.done = False
 
         # instantiate the queue
-        self.queries = queue.LifoQueue()
+        self.queries = deque()
         # instantiate the "master" query
         self.master_query = Query('', None)
-        # put the first queries in the queue
+        # put the first real queries in the queue
         self._add_queries(self.master_query, first_search_characters)
 
     def _add_queries(self, query, search_characters):
@@ -43,9 +39,8 @@ class SymbolDownloader:
         # Each child query will have an additional character appended to the parent query string
         #  (taken from search_characters)
         query.addChildren(search_characters)
-        # reverse children order when adding to the queue because it's LIFO queue
-        for q in query.children[::-1]:
-            self.queries.put(q)
+        # reverse children order when extending the queue because it's LIFO queue
+        self.queries.extend(query.children[::-1])
 
     def _encodeParams(self, params):
         encoded = ''
@@ -79,7 +74,7 @@ class SymbolDownloader:
 
     def nextRequest(self, insecure=False, pandantic=False):
         # not threading, so blocking is irrelevant
-        self.current_query = self.queries.get_nowait()
+        self.current_query = self.queries.pop()
         success = False
         retryCount = 0
         json = None
@@ -135,7 +130,7 @@ class SymbolDownloader:
             # Tell the query it's done
             self.current_query.done()
 
-        if self.queries.empty():
+        if len(self.queries) == 0:
             self.done = True
         else:
             self.done = False
@@ -157,7 +152,7 @@ class SymbolDownloader:
         else:
             print("Progress:"
                   + " Query " + str(len(self.completed_queries)) + "/" +
-                  str(len(self.completed_queries) + self.queries.qsize()) + "."
+                  str(len(self.completed_queries) + len(self.queries)) + "."
                   + "\n"
                   + str(len(self.symbols)) + " unique " + self.type + " entries collected so far."
                  )

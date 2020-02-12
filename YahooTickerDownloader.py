@@ -28,9 +28,8 @@ def loadDownloader(tickerType):
 
 
 def saveDownloader(downloader, tickerType):
-    #with open(tickerType + ".pickle", "wb") as f:
-    #    pickle.dump(downloader, file=f, protocol=pickle.HIGHEST_PROTOCOL)
-    pass
+    with open(tickerType + ".pickle", "wb") as f:
+        pickle.dump(downloader, file=f, protocol=pickle.HIGHEST_PROTOCOL)
 
 def print_symbol(symbol):
     try:
@@ -127,17 +126,16 @@ def main():
                 print("")
 
     except Exception as ex:
-        #print("A exception occurred while downloading. Suspending downloader to disk")
-        #saveDownloader(downloader, tickerType)
-        #print("Successfully saved download state")
-        #print("Try removing {type}.pickle file if this error persists")
-        #print("Issues can be reported on https://github.com/Benny-/Yahoo-ticker-symbol-downloader/issues")
-        #print("")
+        print("A exception occurred while downloading. Suspending downloader to disk")
+        saveDownloader(downloader, tickerType)
+        print("Successfully saved download state")
+        print("Try removing {type}.pickle file if this error persists")
+        print("Issues can be reported on https://github.com/Benny-/Yahoo-ticker-symbol-downloader/issues")
+        print("")
         raise
     except KeyboardInterrupt as ex:
-        #print("Suspending downloader to disk as .pickle file")
-        #saveDownloader(downloader, tickerType)
-        raise
+        print("Suspending downloader to disk as .pickle file")
+        saveDownloader(downloader, tickerType)
 
     if downloader.isDone() or args.export:
         print("Exporting "+downloader.type+" symbols")
