@@ -28,7 +28,8 @@ class Query:
 
     def done(self):
         self._done = True
-        self.parent.child_done(self)
+        if parent is not None:
+            self.parent.child_done(self)
 
     def child_done(self, child):
         self.num_complete += 1
