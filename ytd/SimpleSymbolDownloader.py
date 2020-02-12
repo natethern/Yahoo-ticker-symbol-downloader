@@ -12,7 +12,7 @@ from Query import Query
 
 user_agent = 'yahoo-ticker-symbol-downloader'
 general_search_characters = 'abcdefghijklmnopqrstuvwxyz0123456789.='
-first_search_characters = 'abcdefghijklmnopqrstuvwxyz0123456789'
+first_search_characters = 'xabcdefghijklmnopqrstuvwxyz0123456789'
 
 class SymbolDownloader:
     """Abstract class"""
@@ -33,6 +33,20 @@ class SymbolDownloader:
         self.master_query = Query('', None)
         # put the first real queries in the queue
         self._add_queries(self.master_query, first_search_characters)
+
+        # Attempt to deal with API results < 10 not containing all results
+        # Assume if results = 10 then there are more
+        # Assume if results = 0 or results = 1 then there are no more
+        self.result_count_action = [
+            # for a result count of 0, False means we know it's complete
+            False,
+            # for a result count of 1, False means we know it's complete
+            False,
+            # for a result count of 2 thru 9, None means we don't know
+            #  so we assume it's incomplete
+            None, None, None, None, None, None, None, None,
+            # for a result count of 10, True means we know it's incomplete
+            True ]
 
     def _add_queries(self, query, search_characters):
         # This method will add child queries to query and put the children in the queue
@@ -109,16 +123,7 @@ class SymbolDownloader:
             # record symbols returned for this query
             self.current_query.results.append(symbol.ticker)
 
-        # There is no pagination with this API.
-        # If we receive 10 results, we assume there are more than 10 and
-        #  add another layer of queries to narrow the search further
-        if(count == 10):
-            self._add_queries(self.current_query, general_search_characters)
-        elif(count < 10 and count > 5):
-            # The API has started returning less than 10 results even though there are more results
-            # For now, assume that 6+ queries means incomplete results
-            self._add_queries(self.current_query, general_search_characters)
-        elif(count > 10):
+        if(count > 10):
             # This should never happen with this API, it always returns at most 10 items
             raise Exception("Funny things are happening: count "
                             + text(count)
@@ -126,9 +131,22 @@ class SymbolDownloader:
                             + "Content:"
                             + "\n"
                             + repr(json))
+        
+        # There is no pagination with this API.
+        # If we receive X results, we assume there are more than X and
+        #  add another layer of queries to narrow the search further
+        # In the past, X was known to be 10. Now it is some number 1 < X < 10
+        if self.result_count_action[count] is None:
+            # the action for this number of results is unknown, so assume search narrowing is required
+            self._add_queries(self.current_query, general_search_characters)
+        elif self.result_count_action[count]:
+            # this number of results is known to require search narrowing
+            self._add_queries(self.current_query, general_search_characters)
         else:
             # Tell the query it's done
             self.current_query.done()
+            # Initiate a survey of queries
+            self.querySurvey()
 
         if len(self.queries) == 0:
             self.done = True
@@ -136,6 +154,47 @@ class SymbolDownloader:
             self.done = False
 
         return symbols
+
+    def querySurvey(self):
+        # return if all actions are known
+        if not any([ True if a is None else False for a in self.result_count_action ]):
+            return
+        lsrca = len(self.result_count_action)
+        #print(self.result_count_action)
+        #for i in range(lsrca):
+        #    self.descent_actions[i] = self.result_count_action[i]
+        #    if self.result_count_action[i] is None:
+        #        self.descent_actions[i] = 0
+        actions = [ 0 if a is None else a for a in self.result_count_action ]
+        #print(actions)
+        self.descendQueries(self.master_query, actions)
+        print(actions)
+        # looking for queries where children returned same number of results as the parent
+        # if this occurred 200 times then that result number doesn't require narrowing
+        for i in range(lsrca):
+            if not isinstance(actions[i], bool):
+                if actions[i] >= 20:
+                    for j in range(i+1):
+                        self.result_count_action[j] = False
+            elif actions[i]:
+                # a new search narrowing count has been found
+                for j in range(i, lsrca):
+                    self.result_count_action[j] = True
+        #print(self.result_count_action)
+
+    def descendQueries(self, query, actions):
+        if query.num_children > 0:
+            count = len(query.results)
+            child_count = len(query.children_results)
+            if query.is_done and not isinstance(actions[count], bool):
+                if child_count > count:
+                    # we have found a return count for which search narrowing is required
+                    actions[count] = True
+                elif child_count == count:
+                    # record a probable non-narrowing result
+                    actions[count] += 1;
+            for child in query.children:
+                self.descendQueries(child, actions)
 
     def isDone(self):
         return self.done

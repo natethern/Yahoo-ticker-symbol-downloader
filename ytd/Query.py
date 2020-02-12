@@ -10,7 +10,7 @@ class Query:
         self.num_complete = 0
         self.results = []
         self.children_results = []
-        self._done = False
+        self.is_done = False
 
     def addChildren(self, search_characters):
         # ensure search_characters are all unique
@@ -21,14 +21,14 @@ class Query:
             element = self.query_string + e
             self.children.append(Query(element, self))
                 
-    def addChildResults(self, results):
-        for r in results:
-            if r not in self.children_results:
-                self.children_results.append(r)
+    #def addChildResults(self, results):
+    #    for r in results:
+    #        if r not in self.children_results:
+    #            self.children_results.append(r)
 
     def done(self):
-        self._done = True
-        if parent is not None:
+        self.is_done = True
+        if self.parent is not None:
             self.parent.child_done(self)
 
     def child_done(self, child):
