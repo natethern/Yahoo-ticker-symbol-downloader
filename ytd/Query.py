@@ -21,11 +21,6 @@ class Query:
             element = self.query_string + e
             self.children.append(Query(element, self))
                 
-    #def addChildResults(self, results):
-    #    for r in results:
-    #        if r not in self.children_results:
-    #            self.children_results.append(r)
-
     def done(self):
         self.is_done = True
         if self.parent is not None:

@@ -12,7 +12,7 @@ from Query import Query
 
 user_agent = 'yahoo-ticker-symbol-downloader'
 general_search_characters = 'abcdefghijklmnopqrstuvwxyz0123456789.='
-first_search_characters = 'xabcdefghijklmnopqrstuvwxyz0123456789'
+first_search_characters = 'abcdefghijklmnopqrstuvwxyz123456789'
 
 class SymbolDownloader:
     """Abstract class"""
@@ -48,13 +48,16 @@ class SymbolDownloader:
             # for a result count of 10, True means we know it's incomplete
             True ]
 
+        # In stage 1, queries are processed FIFO
+        # After stage 1, queries are processed LIFO
+        self.stage1 = True
+
     def _add_queries(self, query, search_characters):
         # This method will add child queries to query and put the children in the queue
         # Each child query will have an additional character appended to the parent query string
         #  (taken from search_characters)
         query.addChildren(search_characters)
-        # reverse children order when extending the queue because it's LIFO queue
-        self.queries.extend(query.children[::-1])
+        self.queries.extend(query.children)
 
     def _encodeParams(self, params):
         encoded = ''
@@ -88,7 +91,13 @@ class SymbolDownloader:
 
     def nextRequest(self, insecure=False, pandantic=False):
         # not threading, so blocking is irrelevant
-        self.current_query = self.queries.pop()
+        if self.stage1:
+            # switch to LIFO when there are 2500 staged queries
+            if len(self.queries) >= 2500:
+                self.stage1 = False
+            self.current_query = self.queries.popleft()
+        else:
+            self.current_query = self.queries.pop()
         success = False
         retryCount = 0
         json = None
