@@ -39,7 +39,6 @@ def print_symbol(symbol):
     except:
         print (" Could not display some ticker symbols due to char encoding")
 
-
 def downloadEverything(downloader, tickerType, insecure, sleeptime, pandantic):
     def status_print(symbols):
         print("Got " + str(len(symbols)) + " downloaded " + downloader.type + " symbols:")
@@ -61,12 +60,10 @@ def downloadEverything(downloader, tickerType, insecure, sleeptime, pandantic):
 
         # Save download state occasionally.
         # We do this in case this long running is suddenly interrupted.
-        loop = loop + 1
-        if loop % 200 == 0:
-            print ("Saving downloader to disk...")
-            saveDownloader(downloader, tickerType)
-            print ("Downloader successfully saved.")
-            print ("")
+        print ("Saving downloader to disk...")
+        saveDownloader(downloader, tickerType)
+        print ("Downloader successfully saved.")
+        print ("")
 
         if not downloader.isDone():
             sleep(sleeptime)  # So we don't overload the server.
