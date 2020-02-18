@@ -52,6 +52,18 @@ class SymbolDownloader:
         # After stage 1, queries are processed LIFO
         self.stage1 = True
 
+    def save_state(self):
+        return [ self.symbols, self.current_query, self.completed_queries, self.done,
+                 self.queries, self.master_query,  self.result_count_action, self.stage1 ]
+
+    def restore_state(self, downloader_data):
+        (self.symbols, current_query, self.completed_queries, self.done,
+         self.queries, self.master_query, self.result_count_action, self.stage1) = downloader_data
+        if self.stage1:
+            self.queries.appendleft(current_query)
+        else:
+            self.queries.append(current_query)
+
     def _add_queries(self, query, search_characters):
         # This method will add child queries to query and put the children in the queue
         # Each child query will have an additional character appended to the parent query string

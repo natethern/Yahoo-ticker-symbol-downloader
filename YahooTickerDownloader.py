@@ -25,30 +25,11 @@ def loadDownloader(tickerType):
     downloader = options[tickerType]
     with open(tickerType + ".pickle", "rb") as f:
         downloader_data = pickle.load(f)
-        (downloader.symbols,
-         current_query,
-         downloader.completed_queries,
-         downloader.done,
-         downloader.queries,
-         downloader.master_query,
-         downloader.result_count_action,
-         downloader.stage1) = downloader_data
-        if downloader.stage1:
-            downloader.queries.appendleft(current_query)
-        else:
-            downloader.queries.append(current_query)
+        downloader.restore_state(downloader_data)
         return downloader
 
 def saveDownloader(downloader, tickerType):
-    downloader_data = [ downloader.symbols,
-                        downloader.current_query,
-                        downloader.completed_queries,
-                        downloader.done,
-                        downloader.queries,
-                        downloader.master_query,
-                        downloader.result_count_action,
-                        downloader.stage1 ]
-    print("Current query is " + downloader.current_query.query_string)
+    downloader_data = downloader.save_state()
     with open(tickerType + ".pickle", "wb") as f:
         pickle.dump(downloader_data, file=f, protocol=pickle.HIGHEST_PROTOCOL)
 
