@@ -27,13 +27,6 @@ class SymbolDownloader:
         self.completed_queries = []
         self.done = False
 
-        # instantiate the queue
-        self.queries = deque()
-        # instantiate the "master" query
-        self.master_query = Query('', None)
-        # put the first real queries in the queue
-        self._add_queries(self.master_query, first_search_characters)
-
         # Attempt to deal with API results < 10 not containing all results
         # Assume if results = 10 then there are more
         # Assume if results = 0 or results = 1 then there are no more
@@ -52,6 +45,13 @@ class SymbolDownloader:
         # After stage 1, queries are processed LIFO
         self.stage1 = True
 
+        # instantiate the queue
+        self.queries = deque()
+        # instantiate the "master" query
+        self.master_query = Query('', None)
+        # put the first real queries in the queue
+        self._add_queries(self.master_query, first_search_characters)
+
     def save_state(self):
         return [ self.symbols, self.current_query, self.completed_queries, self.done,
                  self.queries, self.master_query,  self.result_count_action, self.stage1 ]
@@ -69,7 +69,10 @@ class SymbolDownloader:
         # Each child query will have an additional character appended to the parent query string
         #  (taken from search_characters)
         query.addChildren(search_characters)
-        self.queries.extend(query.children)
+        if self.stage1:
+            self.queries.extend(query.children)
+        else:
+            self.queries.extend(query.children[::-1])
 
     def _encodeParams(self, params):
         encoded = ''
@@ -77,9 +80,9 @@ class SymbolDownloader:
             encoded += ';' + quote(key) + '=' + quote(text(value))
         return encoded
 
-    def _fetch(self, insecure):
+    def _fetch(self, insecure, query_string):
         params = {
-            'searchTerm': self.current_query.query_string,
+            'searchTerm': query_string,
         }
         query_string = {
             'device': 'console',
@@ -101,7 +104,7 @@ class SymbolDownloader:
     def decodeSymbolsContainer(self, symbolsContainer):
         raise Exception("Function to extract symbols must be overwritten in subclass. Generic symbol downloader does not know how.")
 
-    def nextRequest(self, insecure=False, pandantic=False):
+    def nextRequest(self, status_print, insecure=False, pandantic=False):
         # not threading, so blocking is irrelevant
         if self.stage1:
             # switch to LIFO when there are 2500 staged queries
@@ -110,6 +113,22 @@ class SymbolDownloader:
             self.current_query = self.queries.popleft()
         else:
             self.current_query = self.queries.pop()
+
+        json = self._fetch_worker(insecure, self.current_query)
+
+        symbols = self._fetch_processor(self.current_query, json)
+        status_print(symbols)
+
+        self.querySurvey()
+
+        if len(self.queries) == 0:
+            self.done = True
+        else:
+            self.done = False
+
+        return symbols
+
+    def _fetch_worker(self, insecure, current_query):
         success = False
         retryCount = 0
         json = None
@@ -119,7 +138,7 @@ class SymbolDownloader:
         maxRetries = 5
         while(success == False):
             try:
-                json = self._fetch(insecure)
+                json = self._fetch(insecure, current_query.query_string)
                 success = True
             except (requests.HTTPError,
                     requests.exceptions.ChunkedEncodingError,
@@ -129,36 +148,35 @@ class SymbolDownloader:
                     attempt = retryCount + 1
                     sleepAmt = int(math.pow(5,attempt))
                     print("Retry attempt: " + str(attempt) + " of " + str(maxRetries) + "."
-                        " Sleep period: " + str(sleepAmt) + " seconds."
-                        )
+                          " Sleep period: " + str(sleepAmt) + " seconds.")
                     sleep(sleepAmt)
                     retryCount = attempt
                 else:
                     raise
+        return json
 
+    def _fetch_processor(self, current_query, json):
         self.completed_queries += [ self.current_query ]
         (symbols, count) = self.decodeSymbolsContainer(json)
 
         for symbol in symbols:
             self.symbols[symbol.ticker] = symbol
             # record symbols returned for this query
-            self.current_query.results.append(symbol.ticker)
+            current_query.results.append(symbol.ticker)
 
         if(count > 10):
             # This should never happen with this API, it always returns at most 10 items
             raise Exception("Funny things are happening: count "
-                            + text(count)
-                            + " > 10. "
-                            + "Content:"
-                            + "\n"
+                            + text(count) + " > 10. Content:\n"
                             + repr(json))
-        
+
         # There is no pagination with this API.
         # If we receive X results, we assume there are more than X and
         #  add another layer of queries to narrow the search further
-        # In the past, X was known to be 10. Now it is some number 1 < X < 10
+        # In the past, X was known to be 10. Now it is some number 1 < X <= 10
         if self.result_count_action[count] is None:
-            # the action for this number of results is unknown, so assume search narrowing is required
+            # the action for this number of results is unknown,
+            # so assume search narrowing is required
             self._add_queries(self.current_query, general_search_characters)
         elif self.result_count_action[count]:
             # this number of results is known to require search narrowing
@@ -166,13 +184,6 @@ class SymbolDownloader:
         else:
             # Tell the query it's done
             self.current_query.done()
-            # Initiate a survey of queries
-            self.querySurvey()
-
-        if len(self.queries) == 0:
-            self.done = True
-        else:
-            self.done = False
 
         return symbols
 
